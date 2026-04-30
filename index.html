@@ -55,13 +55,15 @@
             <div class="mode-card">
                 <h3>Practice: Fill in the Blank</h3>
                 <p>Shows the sentence with dotted blanks. Correct letters stay. Wrong letters disappear.</p>
-                <button onclick="startSession('practice')">✏️ Start Practice</button>
+                <button onclick="startSession('practice', false)">✏️ Start Practice</button>
+                <button onclick="startSession('practice', true)" class="dark">🔀 Random Practice</button>
             </div>
 
             <div class="mode-card">
                 <h3>Spelling: Listen and Type</h3>
                 <p>Only pronounces the word slowly and clearly. No sentence hint.</p>
-                <button onclick="startSession('spelling')">🔊 Start Spelling</button>
+                <button onclick="startSession('spelling', false)">🔊 Start Spelling</button>
+                <button onclick="startSession('spelling', true)" class="dark">🔀 Random Spelling</button>
             </div>
         </div>
 
@@ -213,6 +215,17 @@ function saveCustomList() {
     switchTab('start');
 }
 
+function shuffleList(list) {
+    const shuffled = [...list];
+
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const randomIndex = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[randomIndex]] = [shuffled[randomIndex], shuffled[i]];
+    }
+
+    return shuffled;
+}
+
 function switchTab(tab) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.getElementById('start-tab').classList.add('hidden');
@@ -226,14 +239,22 @@ function switchTab(tab) {
     }
 }
 
-function startSession(mode) {
+function startSession(mode, randomOrder = false) {
     const selectedWeek = document.getElementById('week-selector').value;
-    currentList = allLists[selectedWeek];
+
+    currentList = randomOrder 
+        ? shuffleList(allLists[selectedWeek]) 
+        : [...allLists[selectedWeek]];
+
     currentIndex = 0;
     currentMode = mode;
-    document.getElementById('list-title').innerText = selectedWeek;
+
+    const orderText = randomOrder ? ' - Random' : '';
+    document.getElementById('list-title').innerText = selectedWeek + orderText;
+
     document.getElementById('setup-screen').classList.add('hidden');
     document.getElementById('session-screen').classList.remove('hidden');
+
     loadWord();
 }
 
