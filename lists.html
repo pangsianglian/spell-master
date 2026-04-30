@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Lists - SpellMaster</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <h1>Add List</h1>
+    <div id="app-version" class="version"></div>
+    <section class="card">
+      <label>List name</label>
+      <input type="text" id="list-name" placeholder="e.g. Term 2 Week 5" />
+      <label>Words or word | sentence</label>
+      <textarea id="list-text" placeholder="fly | The bird can fly in the sky.&#10;snap | The crocodile can snap its mouth shut.&#10;tea"></textarea>
+      <p class="small-note">You can enter one word per line, comma-separated words, or word | sentence.</p>
+      <button onclick="saveList()" class="success">Save List</button>
+    </section>
+    <section class="card">
+      <h3>Saved Custom Lists</h3>
+      <div id="custom-list-box"></div>
+    </section>
+    <a class="button-link secondary" href="index.html">⬅️ Back to Menu</a>
+  </main>
+  <script src="js/app-config.js"></script>
+  <script src="js/default-data.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/session-utils.js"></script>
+  <script>
+    window.addEventListener('load', () => { renderVersion(); renderCustomLists(); });
+    function parseInput(text) {
+      let lines = text.includes('\n') ? text.split(/\n+/) : text.split(',');
+      return lines.map(line => line.trim()).filter(Boolean).map(line => {
+        const cleaned = line.replace(/^\d+[.)]\s*/, '').replace(/^[-•]\s*/, '').trim();
+        if (cleaned.includes('|')) {
+          const [word, sentence] = cleaned.split('|').map(x => x.trim());
+          return { w: word, s: sentence || `The word is ${word}.` };
+        }
+        if (cleaned.includes(',')) {
+          const [word, sentence] = cleaned.split(',').map(x => x.trim());
+          return { w: word, s: sentence || `The word is ${word}.` };
+        }
+        return { w: cleaned, s: `The word is ${cleaned}.` };
+      }).filter(item => item.w);
+    }
+    function saveList() {
+      const name = document.getElementById('list-name').value.trim();
+      const text = document.getElementById('list-text').value.trim();
+      if (!name || !text) return alert('Please enter list name and words.');
+      const items = parseInput(text);
+      if (!items.length) return alert('No valid words found.');
+      const custom = getCustomLists();
+      custom[name] = items;
+      saveCustomLists(custom);
+      saveLastList(name);
+      document.getElementById('list-name').value = '';
+      document.getElementById('list-text').value = '';
+      renderCustomLists();
+      alert('List saved.');
+    }
+    function deleteList(name) {
+      if (!confirm(`Delete ${name}?`)) return;
+      const custom = getCustomLists();
+      delete custom[name];
+      saveCustomLists(custom);
+      renderCustomLists();
+    }
+    function renderCustomLists() {
+      const custom = getCustomLists();
+      const box = document.getElementById('custom-list-box');
+      const names = Object.keys(custom);
+      if (!names.length) { box.innerHTML = '<p class="small-note">No custom lists yet.</p>'; return; }
+      box.innerHTML = names.map(name => `<div class="card"><strong>${name}</strong><p>${custom[name].length} words</p><button class="danger" onclick="deleteList('${name.replace(/'/g, "\\'")}')">Delete</button></div>`).join('');
+    }
+  </script>
+</body>
+</html>

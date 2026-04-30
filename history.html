@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>History - SpellMaster</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <h1>History</h1>
+    <div id="app-version" class="version"></div>
+    <div id="history-box"></div>
+    <button onclick="clearHistory()" class="danger">Clear History</button>
+    <a class="button-link secondary" href="index.html">⬅️ Back to Menu</a>
+  </main>
+  <script src="js/app-config.js"></script>
+  <script src="js/default-data.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/session-utils.js"></script>
+  <script>
+    window.addEventListener('load', () => { renderVersion(); renderHistory(); });
+    function renderHistory() {
+      const history = getHistory();
+      const box = document.getElementById('history-box');
+      if (!history.length) { box.innerHTML = '<div class="card">No practice history yet.</div>'; return; }
+      box.innerHTML = history.map(record => {
+        const weak = record.weakWords.length ? record.weakWords.join(', ') : 'None';
+        return `<section class="card"><h3>${record.listName}</h3><p><strong>${record.random ? 'Random ' : ''}${record.mode}</strong><br>First-try score: ${record.correctFirstTry}/${record.total}<br>Weak words: ${weak}<br>Time: ${formatDuration(record.durationMs)}<br>${new Date(record.endedAt).toLocaleString()}</p></section>`;
+      }).join('');
+    }
+    function clearHistory() {
+      if (!confirm('Clear all history?')) return;
+      saveHistory([]);
+      renderHistory();
+    }
+  </script>
+</body>
+</html>

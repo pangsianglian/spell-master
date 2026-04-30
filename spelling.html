@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Spelling - SpellMaster</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <h1>Spelling</h1>
+    <div id="app-version" class="version"></div>
+    <div class="top-row"><span id="list-title"></span><span id="progress"></span></div>
+    <div class="badge" id="mode-badge"></div>
+
+    <div id="spelling-screen">
+      <div class="sentence-hint">Listen carefully, then type the word.</div>
+      <button onclick="pronounceWord()" class="dark">🔊 Hear Word Again</button>
+      <input type="text" id="spelling-input" placeholder="Type spelling here..." autocomplete="off" />
+      <button onclick="checkSpellingAnswer()">Check Spelling</button>
+      <div id="feedback" class="feedback"></div>
+      <button onclick="window.location.href='index.html'" class="secondary">⬅️ Back to Menu</button>
+    </div>
+
+    <div id="result-screen" class="hidden"></div>
+  </main>
+
+  <script src="js/app-config.js"></script>
+  <script src="js/default-data.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/speech.js"></script>
+  <script src="js/session-utils.js"></script>
+  <script src="js/spelling.js"></script>
+</body>
+</html>
