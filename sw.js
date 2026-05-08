@@ -1,4 +1,4 @@
-const CACHE_NAME = 'spellmaster-cache-v224';
+const CACHE_NAME = 'spellmaster-cache-v225';
 const urlsToCache = [
   './',
   './index.html',

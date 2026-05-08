@@ -4,78 +4,191 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Lists - SpellMaster Kids</title>
-  <link rel="manifest" href="manifest.json?v=20260508-v224" />
-  <link rel="stylesheet" href="css/style.css?v=20260508-v224" />
+  <link rel="manifest" href="manifest.json?v=20260508-v225" />
+  <link rel="stylesheet" href="css/style.css?v=20260508-v225" />
 </head>
 <body>
   <main class="app-shell">
     <div class="hero-mascot small" aria-hidden="true">📚</div>
-    <h1>Add List</h1>
+    <h1>Manage & Add Lists</h1>
     <div id="app-version" class="version"></div>
     <section class="card">
-      <label>List name</label>
+      <h3 id="form-title">➕ Add New List</h3>
+      <label>List title / header</label>
       <input type="text" id="list-name" placeholder="e.g. Term 2 Week 5" />
       <label>Words or word | sentence</label>
       <textarea id="list-text" placeholder="fly | The bird can fly in the sky.&#10;snap | The crocodile can snap its mouth shut.&#10;tea"></textarea>
       <p class="small-note">You can enter one word per line, comma-separated words, or word | sentence.</p>
-      <button onclick="saveList()" class="success">Save List</button>
+      <button id="save-list-btn" onclick="saveList()" class="success">Save List</button>
+      <button id="cancel-edit-btn" onclick="cancelEdit()" class="secondary hidden" type="button">Cancel Edit</button>
     </section>
     <section class="card">
       <h3>Saved Custom Lists</h3>
+      <p class="small-note">Tip: click <strong>Rename</strong> to shorten imported list headers before practising.</p>
       <div id="custom-list-box"></div>
     </section>
     <a class="button-link success" href="import.html">📥 Import Words from File</a>
     <a class="button-link secondary" href="index.html">⬅️ Back to Menu</a>
   </main>
-  <script src="js/app-config.js?v=20260508-v224"></script>
-  <script src="js/default-data.js?v=20260508-v224"></script>
-  <script src="js/storage.js?v=20260508-v224"></script>
-  <script src="js/session-utils.js?v=20260508-v224"></script>
+  <script src="js/app-config.js?v=20260508-v225"></script>
+  <script src="js/default-data.js?v=20260508-v225"></script>
+  <script src="js/storage.js?v=20260508-v225"></script>
+  <script src="js/session-utils.js?v=20260508-v225"></script>
   <script>
-    window.addEventListener('load', () => { renderVersion(); renderCustomLists(); });
+    let editingOriginalName = null;
+
+    window.addEventListener('load', () => {
+      renderVersion();
+      renderCustomLists();
+    });
+
     function parseInput(text) {
       let lines = text.includes('\n') ? text.split(/\n+/) : text.split(',');
       return lines.map(line => line.trim()).filter(Boolean).map(line => {
         const cleaned = line.replace(/^\d+[.)]\s*/, '').replace(/^[-•]\s*/, '').trim();
         if (cleaned.includes('|')) {
-          const [word, sentence] = cleaned.split('|').map(x => x.trim());
-          return { w: word, s: sentence || `The word is ${word}.` };
+          const [word, ...sentenceParts] = cleaned.split('|');
+          const sentence = sentenceParts.join('|').trim();
+          return { w: word.trim(), s: sentence || `The word is ${word.trim()}.` };
         }
         if (cleaned.includes(',')) {
-          const [word, sentence] = cleaned.split(',').map(x => x.trim());
-          return { w: word, s: sentence || `The word is ${word}.` };
+          const [word, ...sentenceParts] = cleaned.split(',');
+          const sentence = sentenceParts.join(',').trim();
+          return { w: word.trim(), s: sentence || `The word is ${word.trim()}.` };
         }
         return { w: cleaned, s: `The word is ${cleaned}.` };
       }).filter(item => item.w);
     }
+
     function saveList() {
       const name = document.getElementById('list-name').value.trim();
       const text = document.getElementById('list-text').value.trim();
-      if (!name || !text) return alert('Please enter list name and words.');
+      if (!name || !text) return alert('Please enter list title and words.');
       const items = parseInput(text);
       if (!items.length) return alert('No valid words found.');
+
       const custom = getCustomLists();
+      const isRename = editingOriginalName && editingOriginalName !== name;
+      const targetExists = Object.prototype.hasOwnProperty.call(custom, name);
+
+      if ((!editingOriginalName && targetExists) || (isRename && targetExists)) {
+        if (!confirm(`A custom list named "${name}" already exists. Replace it?`)) return;
+      }
+
+      if (editingOriginalName && editingOriginalName !== name) {
+        delete custom[editingOriginalName];
+        if (getLastList() === editingOriginalName) saveLastList(name);
+      }
+
       custom[name] = items;
       saveCustomLists(custom);
       saveLastList(name);
+      resetForm();
+      renderCustomLists();
+      alert(editingOriginalName ? 'List updated.' : 'List saved.');
+    }
+
+    function renameList(oldName) {
+      const custom = getCustomLists();
+      if (!custom[oldName]) return alert('This list cannot be found. Please refresh and try again.');
+
+      const newName = prompt('Edit list title / header:', oldName);
+      if (newName === null) return;
+      const trimmed = newName.trim();
+      if (!trimmed) return alert('List title cannot be empty.');
+      if (trimmed === oldName) return;
+
+      if (custom[trimmed] && !confirm(`A custom list named "${trimmed}" already exists. Replace it?`)) return;
+
+      custom[trimmed] = custom[oldName];
+      delete custom[oldName];
+      saveCustomLists(custom);
+      if (getLastList() === oldName) saveLastList(trimmed);
+      renderCustomLists();
+      alert('List title updated.');
+    }
+
+    function editList(name) {
+      const custom = getCustomLists();
+      const items = custom[name];
+      if (!items) return alert('This list cannot be found. Please refresh and try again.');
+
+      editingOriginalName = name;
+      document.getElementById('form-title').textContent = '✏️ Edit List';
+      document.getElementById('list-name').value = name;
+      document.getElementById('list-text').value = items.map(item => `${item.w} | ${item.s || `The word is ${item.w}.`}`).join('\n');
+      document.getElementById('save-list-btn').textContent = 'Update List';
+      document.getElementById('cancel-edit-btn').classList.remove('hidden');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function cancelEdit() {
+      resetForm();
+    }
+
+    function resetForm() {
+      editingOriginalName = null;
+      document.getElementById('form-title').textContent = '➕ Add New List';
       document.getElementById('list-name').value = '';
       document.getElementById('list-text').value = '';
-      renderCustomLists();
-      alert('List saved.');
+      document.getElementById('save-list-btn').textContent = 'Save List';
+      document.getElementById('cancel-edit-btn').classList.add('hidden');
     }
+
     function deleteList(name) {
       if (!confirm(`Delete ${name}?`)) return;
       const custom = getCustomLists();
       delete custom[name];
       saveCustomLists(custom);
+      if (getLastList() === name) localStorage.removeItem(STORAGE_KEYS.lastList);
+      if (editingOriginalName === name) resetForm();
       renderCustomLists();
     }
+
     function renderCustomLists() {
       const custom = getCustomLists();
       const box = document.getElementById('custom-list-box');
       const names = Object.keys(custom);
-      if (!names.length) { box.innerHTML = '<p class="small-note">No custom lists yet.</p>'; return; }
-      box.innerHTML = names.map(name => `<div class="card"><strong>${name}</strong><p>${custom[name].length} words</p><button class="danger" onclick="deleteList('${name.replace(/'/g, "\\'")}')">Delete</button></div>`).join('');
+      if (!names.length) {
+        box.innerHTML = '<p class="small-note">No custom lists yet.</p>';
+        return;
+      }
+
+      box.innerHTML = names.map(name => {
+        const items = Array.isArray(custom[name]) ? custom[name] : [];
+        const preview = items.slice(0, 4).map(item => item.w).join(', ');
+        return `
+          <div class="card list-manager-card" data-list-name="${escapeHtml(name)}">
+            <strong>${escapeHtml(name)}</strong>
+            <p>${items.length} words${preview ? ` · ${escapeHtml(preview)}${items.length > 4 ? '...' : ''}` : ''}</p>
+            <div class="button-row compact">
+              <button class="secondary" type="button" data-action="rename" data-name="${escapeAttr(name)}">✏️ Rename</button>
+              <button class="warning" type="button" data-action="edit" data-name="${escapeAttr(name)}">📝 Edit Words</button>
+              <button class="danger" type="button" data-action="delete" data-name="${escapeAttr(name)}">Delete</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    document.getElementById('custom-list-box').addEventListener('click', event => {
+      const button = event.target.closest('button[data-action]');
+      if (!button) return;
+      const name = button.getAttribute('data-name');
+      const action = button.getAttribute('data-action');
+      if (action === 'rename') renameList(name);
+      if (action === 'edit') editList(name);
+      if (action === 'delete') deleteList(name);
+    });
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>'"]/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+      }[char]));
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value);
     }
   </script>
 </body>
