@@ -25,9 +25,10 @@ window.addEventListener('load', () => {
     }
   });
   document.querySelectorAll('input[name="spellingPlayMode"]').forEach(radio => {
-    radio.addEventListener('change', () => applySpellingMode(true));
+    radio.addEventListener('change', () => { applySpellingMode(true); if (typeof trackFeature === 'function') trackFeature('spelling_mode_changed', { playMode: getSpellingPlayMode() }); });
   });
   loadWord();
+  if (typeof trackFeature === 'function') trackFeature('spelling_session_started', { random: !!random, words: currentList.length });
 });
 
 function loadWord() {
@@ -91,6 +92,7 @@ function pronounceWord() {
 }
 
 function showSpellingHint() {
+  if (typeof trackFeature === 'function') trackFeature('spelling_hint_used');
   const item = currentList[currentIndex];
   usedHintForCurrentWord = true;
   const feedback = document.getElementById('feedback');
@@ -105,6 +107,7 @@ function showSpellingHint() {
 }
 
 function showSpellingAnswer() {
+  if (typeof trackFeature === 'function') trackFeature('spelling_show_answer_used');
   const item = currentList[currentIndex];
   usedHintForCurrentWord = true;
   revealedAnswerForCurrentWord = true;
@@ -116,6 +119,7 @@ function showSpellingAnswer() {
 }
 
 function skipSpellingWord() {
+  if (typeof trackFeature === 'function') trackFeature('spelling_word_skipped');
   const item = currentList[currentIndex];
   skippedWords.push(item.w);
   attempts.push({ word: item.w, attempts: attemptCountForCurrentWord || 1, firstAttemptCorrect: false, skipped: true, stars: 0 });
@@ -183,6 +187,7 @@ function finishSession() {
   record.stars = starCount;
   record.skippedWords = skippedWords;
   addHistoryRecord(record);
+  if (typeof trackFeature === 'function') trackFeature('spelling_session_completed', { words: record.total, stars: record.stars || 0, skipped: (record.skippedWords || []).length });
   showResult(record);
 }
 

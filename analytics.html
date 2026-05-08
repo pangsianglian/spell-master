@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Local Usage Stats - SpellMaster Kids</title>
+  <link rel="manifest" href="manifest.json?v=20260508-v230" />
+  <link rel="stylesheet" href="css/style.css?v=20260508-v230" />
+</head>
+<body>
+  <main class="app-shell">
+    <div class="hero-mascot small" aria-hidden="true">📊</div>
+    <h1>Local Usage Stats</h1>
+    <div id="app-version" class="version"></div>
+    <p class="subtitle">Privacy-friendly analytics stored on this device.</p>
+    <div id="analytics-dashboard"></div>
+    <a class="button-link secondary" href="index.html" data-track="back_to_menu_from_analytics">⬅️ Back to Menu</a>
+  </main>
+  <script src="js/app-config.js?v=20260508-v230"></script>
+  <script src="js/analytics.js?v=20260508-v230"></script>
+  <script>window.addEventListener('load', () => { if (typeof renderVersion === 'function') renderVersion(); });</script>
+</body>
+</html>

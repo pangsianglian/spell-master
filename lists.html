@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Lists - SpellMaster Kids</title>
-  <link rel="manifest" href="manifest.json?v=20260508-v225" />
-  <link rel="stylesheet" href="css/style.css?v=20260508-v225" />
+  <link rel="manifest" href="manifest.json?v=20260508-v230" />
+  <link rel="stylesheet" href="css/style.css?v=20260508-v230" />
 </head>
 <body>
   <main class="app-shell">
@@ -30,10 +30,11 @@
     <a class="button-link success" href="import.html">📥 Import Words from File</a>
     <a class="button-link secondary" href="index.html">⬅️ Back to Menu</a>
   </main>
-  <script src="js/app-config.js?v=20260508-v225"></script>
-  <script src="js/default-data.js?v=20260508-v225"></script>
-  <script src="js/storage.js?v=20260508-v225"></script>
-  <script src="js/session-utils.js?v=20260508-v225"></script>
+  <script src="js/app-config.js?v=20260508-v230"></script>
+  <script src="js/analytics.js?v=20260508-v230"></script>
+  <script src="js/default-data.js?v=20260508-v230"></script>
+  <script src="js/storage.js?v=20260508-v230"></script>
+  <script src="js/session-utils.js?v=20260508-v230"></script>
   <script>
     let editingOriginalName = null;
 
@@ -85,6 +86,7 @@
       saveLastList(name);
       resetForm();
       renderCustomLists();
+      if (typeof trackFeature === 'function') trackFeature(editingOriginalName ? 'custom_list_updated' : 'custom_list_created', { words: items.length });
       alert(editingOriginalName ? 'List updated.' : 'List saved.');
     }
 
@@ -105,6 +107,7 @@
       saveCustomLists(custom);
       if (getLastList() === oldName) saveLastList(trimmed);
       renderCustomLists();
+      if (typeof trackFeature === 'function') trackFeature('custom_list_renamed');
       alert('List title updated.');
     }
 
@@ -119,6 +122,7 @@
       document.getElementById('list-text').value = items.map(item => `${item.w} | ${item.s || `The word is ${item.w}.`}`).join('\n');
       document.getElementById('save-list-btn').textContent = 'Update List';
       document.getElementById('cancel-edit-btn').classList.remove('hidden');
+      if (typeof trackFeature === 'function') trackFeature('custom_list_edit_opened');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -143,6 +147,7 @@
       if (getLastList() === name) localStorage.removeItem(STORAGE_KEYS.lastList);
       if (editingOriginalName === name) resetForm();
       renderCustomLists();
+      if (typeof trackFeature === 'function') trackFeature('custom_list_deleted');
     }
 
     function renderCustomLists() {

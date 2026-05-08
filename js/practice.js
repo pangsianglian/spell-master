@@ -26,9 +26,10 @@ window.addEventListener('load', () => {
     }
   });
   document.querySelectorAll('input[name="practicePlayMode"]').forEach(radio => {
-    radio.addEventListener('change', () => applyPracticeMode(true));
+    radio.addEventListener('change', () => { applyPracticeMode(true); if (typeof trackFeature === 'function') trackFeature('practice_mode_changed', { playMode: getPracticePlayMode() }); });
   });
   loadWord();
+  if (typeof trackFeature === 'function') trackFeature('practice_session_started', { random: !!random, words: currentList.length });
 });
 
 function loadWord() {
@@ -110,6 +111,7 @@ function pronounceSentence() {
 }
 
 function showPracticeHint() {
+  if (typeof trackFeature === 'function') trackFeature('practice_hint_used');
   const item = currentList[currentIndex];
   usedHintForCurrentWord = true;
   const word = item.w.toLowerCase();
@@ -125,6 +127,7 @@ function showPracticeHint() {
 }
 
 function showPracticeAnswer() {
+  if (typeof trackFeature === 'function') trackFeature('practice_show_answer_used');
   const item = currentList[currentIndex];
   revealedAnswerForCurrentWord = true;
   usedHintForCurrentWord = true;
@@ -138,6 +141,7 @@ function showPracticeAnswer() {
 }
 
 function skipPracticeWord() {
+  if (typeof trackFeature === 'function') trackFeature('practice_word_skipped');
   const item = currentList[currentIndex];
   skippedWords.push(item.w);
   attempts.push({ word: item.w, attempts: attemptCountForCurrentWord || 1, firstAttemptCorrect: false, skipped: true, stars: 0 });
@@ -211,6 +215,7 @@ function finishSession() {
   record.stars = starCount;
   record.skippedWords = skippedWords;
   addHistoryRecord(record);
+  if (typeof trackFeature === 'function') trackFeature('practice_session_completed', { words: record.total, stars: record.stars || 0, skipped: (record.skippedWords || []).length });
   showResult(record);
 }
 

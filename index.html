@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>SpellMaster Kids 2026</title>
-  <link rel="manifest" href="manifest.json?v=20260508-v225" />
-  <link rel="stylesheet" href="css/style.css?v=20260508-v225" />
+  <link rel="manifest" href="manifest.json?v=20260508-v230" />
+  <link rel="stylesheet" href="css/style.css?v=20260508-v230" />
 </head>
 <body>
   <main class="app-shell home-shell">
@@ -24,31 +24,31 @@
         <div class="menu-emoji">🐊</div>
         <h3>Crocodile Practice</h3>
         <p>Fill in missing letters with friendly hints.</p>
-        <button onclick="goToMode('practice', false)">✏️ Start Practice</button>
-        <button onclick="goToMode('practice', true)" class="dark">🔀 Random Practice</button>
+        <button onclick="goToMode('practice', false)" data-track="start_practice">✏️ Start Practice</button>
+        <button onclick="goToMode('practice', true)" class="dark" data-track="start_random_practice">🔀 Random Practice</button>
       </article>
 
       <article class="menu-card spelling-card">
         <div class="menu-emoji">🎧</div>
         <h3>Listen & Spell</h3>
         <p>Use sound, quiet clues, or both.</p>
-        <button onclick="goToMode('spelling', false)">🔊 Start Spelling</button>
-        <button onclick="goToMode('spelling', true)" class="dark">🔀 Random Spelling</button>
+        <button onclick="goToMode('spelling', false)" data-track="start_spelling">🔊 Start Spelling</button>
+        <button onclick="goToMode('spelling', true)" class="dark" data-track="start_random_spelling">🔀 Random Spelling</button>
       </article>
 
-      <a class="menu-card import-card" href="import.html">
+      <a class="menu-card import-card" href="import.html" data-track="open_import_page">
         <div class="menu-emoji">📥</div>
         <h3>Import Words</h3>
         <p>Add lists from TXT, DOCX, PDF, pictures or pasted text.</p>
       </a>
 
-      <a class="menu-card list-card" href="lists.html">
+      <a class="menu-card list-card" href="lists.html" data-track="open_lists_page">
         <div class="menu-emoji">➕</div>
         <h3>Add / Manage Lists</h3>
         <p>Create or edit parent/teacher word lists.</p>
       </a>
 
-      <a class="menu-card history-card" href="history.html">
+      <a class="menu-card history-card" href="history.html" data-track="open_history_page">
         <div class="menu-emoji">⭐</div>
         <h3>My Stars & History</h3>
         <p>Review progress and words to practise again.</p>
@@ -56,15 +56,16 @@
     </section>
   </main>
 
-  <script src="js/app-config.js?v=20260508-v225"></script>
-  <script src="js/default-data.js?v=20260508-v225"></script>
-  <script src="js/storage.js?v=20260508-v225"></script>
-  <script src="js/session-utils.js?v=20260508-v225"></script>
+  <script src="js/app-config.js?v=20260508-v230"></script>
+  <script src="js/analytics.js?v=20260508-v230"></script>
+  <script src="js/default-data.js?v=20260508-v230"></script>
+  <script src="js/storage.js?v=20260508-v230"></script>
+  <script src="js/session-utils.js?v=20260508-v230"></script>
   <script>
     window.addEventListener('load', () => {
       renderVersion();
       loadDropdown();
-      if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js?v=20260508-v225');
+      if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js?v=20260508-v230');
     });
 
     function loadDropdown() {
@@ -84,6 +85,7 @@
     function goToMode(mode, random) {
       const listName = document.getElementById('week-selector').value;
       saveLastList(listName);
+      if (typeof trackFeature === 'function') trackFeature('selected_list_for_mode', { mode, random: !!random });
       const target = mode === 'practice' ? 'practice.html' : 'spelling.html';
       window.location.href = `${target}?list=${encodeURIComponent(listName)}&random=${random ? '1' : '0'}`;
     }

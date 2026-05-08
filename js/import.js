@@ -21,6 +21,7 @@ let lastOcrConfidence = null;
 window.addEventListener('load', renderVersion);
 
 extractBtn.addEventListener('click', async () => {
+  if (typeof trackFeature === 'function') trackFeature('import_extract_clicked');
   const file = fileInput.files[0];
   if (!file) {
     showStatus('Please choose a file first.', true);
@@ -33,7 +34,7 @@ extractBtn.addEventListener('click', async () => {
     let rawText = '';
     const lowerName = file.name.toLowerCase();
     const isImage = file.type.startsWith('image/');
-    lastImportSource = isImage ? 'image' : lowerName.endsWith('.pdf') ? 'pdf' : 'file';
+    lastImportSource = isImage ? 'image' : lowerName.endsWith('.pdf') ? 'pdf' : lowerName.endsWith('.docx') ? 'docx' : lowerName.endsWith('.txt') ? 'txt' : 'file';
     lastOcrConfidence = null;
 
     if (file.type === 'text/plain' || lowerName.endsWith('.txt')) {
@@ -64,13 +65,16 @@ extractBtn.addEventListener('click', async () => {
     const sectionCount = countPreviewSections(previewText.value);
     const sectionText = sectionCount > 1 ? ` across ${sectionCount} weekly lists` : '';
     showStatus(`Imported ${countPreviewWords(previewText.value)} word(s)${sectionText}. Please check and edit before clicking Confirm & Save.`);
+    if (typeof trackFeature === 'function') trackFeature('import_extract_success', { source: lastImportSource, words: countPreviewWords(previewText.value), sections: sectionCount });
   } catch (error) {
     console.error(error);
+    if (typeof trackFeature === 'function') trackFeature('import_extract_failed', { source: lastImportSource });
     showStatus('Sorry, I could not read this file. Please try another file or paste the words instead.', true);
   }
 });
 
 usePasteBtn.addEventListener('click', () => {
+  if (typeof trackFeature === 'function') trackFeature('import_use_paste_clicked');
   const rawText = pasteText.value.trim();
   if (!rawText) {
     showStatus('Please paste some words first.', true);
@@ -83,9 +87,11 @@ usePasteBtn.addEventListener('click', () => {
   const sectionCount = countPreviewSections(previewText.value);
   const sectionText = sectionCount > 1 ? ` across ${sectionCount} weekly lists` : '';
   showStatus(`Prepared ${countPreviewWords(previewText.value)} word(s)${sectionText}. Please check and edit before saving.`);
+  if (typeof trackFeature === 'function') trackFeature('import_paste_prepared', { words: countPreviewWords(previewText.value), sections: sectionCount });
 });
 
 confirmSaveBtn.addEventListener('click', () => {
+  if (typeof trackFeature === 'function') trackFeature('import_confirm_save_clicked');
   const baseListName = listNameInput.value.trim();
   const content = previewText.value.trim();
 
@@ -131,6 +137,7 @@ confirmSaveBtn.addEventListener('click', () => {
     ? `Saved ${sections.length} weekly lists with ${totalWords} word(s). ⭐`
     : `Saved "${baseListName}" with ${totalWords} word(s). ⭐`;
   showStatus(savedText);
+  if (typeof trackFeature === 'function') trackFeature('import_lists_saved', { source: lastImportSource, lists: sections.length, words: totalWords });
 });
 
 clearBtn.addEventListener('click', () => {
@@ -141,6 +148,7 @@ clearBtn.addEventListener('click', () => {
   fileInput.value = '';
   lastOcrConfidence = null;
   showStatus('Import preview cleared.');
+  if (typeof trackFeature === 'function') trackFeature('import_preview_cleared');
 });
 
 function showStatus(message, isError = false) {
