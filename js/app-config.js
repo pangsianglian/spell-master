@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2.3.0-kids';
+const APP_VERSION = 'v2.3.2-kids';
 window.APP_VERSION = APP_VERSION;
 const STORAGE_KEYS = {
   customLists: 'spellmaster-custom',
@@ -10,7 +10,7 @@ const STORAGE_KEYS = {
 };
 
 // Optional: add your Google Analytics 4 Measurement ID here later, e.g. 'G-XXXXXXXXXX'.
-// Without this ID, the app still keeps privacy-friendly local analytics on the visitor's device only.
+// Without this ID, the app keeps lightweight local anonymous analytics in the background only; no stats dashboard is shown to parents or children.
 window.SPELLMASTER_ANALYTICS = {
   enabled: true,
   googleMeasurementId: '',
