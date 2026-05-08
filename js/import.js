@@ -120,14 +120,72 @@ async function readPdfFile(file) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs';
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  let fullText = '';
+  const extractedLines = [];
+
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+    showStatus(`Reading PDF page ${pageNumber} of ${pdf.numPages}...`);
     const page = await pdf.getPage(pageNumber);
     const textContent = await page.getTextContent();
-    const pageText = textContent.items.map(item => item.str).join(' ');
-    fullText += pageText + '\n';
+    const pageLines = extractPdfTableRows(textContent.items);
+
+    if (pageLines.length) {
+      extractedLines.push(...pageLines);
+    } else {
+      // Fallback for simple PDFs without table-like coordinates.
+      extractedLines.push(textContent.items.map(item => item.str).join(' '));
+    }
   }
-  return fullText;
+
+  return extractedLines.join('\n');
+}
+
+function extractPdfTableRows(items) {
+  const tokens = items
+    .map(item => ({
+      text: String(item.str || '').replace(/\s+/g, ' ').trim(),
+      x: Number(item.transform?.[4] || 0),
+      y: Number(item.transform?.[5] || 0)
+    }))
+    .filter(item => item.text);
+
+  const rows = [];
+  const yTolerance = 3;
+
+  tokens.forEach(token => {
+    let row = rows.find(existing => Math.abs(existing.y - token.y) <= yTolerance);
+    if (!row) {
+      row = { y: token.y, items: [] };
+      rows.push(row);
+    }
+    row.items.push(token);
+  });
+
+  rows.sort((a, b) => b.y - a.y);
+  rows.forEach(row => row.items.sort((a, b) => a.x - b.x));
+
+  const output = [];
+  let pendingNumber = '';
+
+  rows.forEach(row => {
+    let line = row.items.map(item => item.text).join(' ').replace(/\s+/g, ' ').trim();
+    if (!line) return;
+
+    // Some PDFs place the row number slightly above the word/sentence row.
+    if (/^\d+[.)]?$/.test(line)) {
+      pendingNumber = line;
+      return;
+    }
+
+    if (pendingNumber && !/^\d+[.)]?\s+/.test(line)) {
+      line = `${pendingNumber} ${line}`;
+      pendingNumber = '';
+    }
+
+    const parsed = parsePotentialWordSentenceLine(line);
+    if (parsed) output.push(parsed);
+  });
+
+  return dedupeLines(output);
 }
 
 async function readImageFile(file) {
@@ -144,16 +202,32 @@ async function readImageFile(file) {
 }
 
 function cleanImportedText(text) {
-  return text
+  const sourceLines = text
     .split(/\r?\n|;/)
     .map(line => line.trim())
+    .filter(Boolean);
+
+  const structuredLines = sourceLines
+    .flatMap(line => splitCommaOnlyWordRows(line))
+    .map(line => line.replace(/^[•\-*]\s*/, '').replace(/\s+/g, ' ').trim())
+    .map(parsePotentialWordSentenceLine)
+    .filter(Boolean);
+
+  if (structuredLines.length >= 3) return dedupeLines(structuredLines);
+
+  const flatRows = extractRowsFromFlatPdfText(text);
+  if (flatRows.length >= 3) return dedupeLines(flatRows);
+
+  return sourceLines
     .flatMap(line => splitCommaOnlyWordRows(line))
     .map(line => line.replace(/^\d+[.)\-\s]+/, ''))
     .map(line => line.replace(/^[•\-*]\s*/, ''))
     .map(line => line.replace(/\s+/g, ' ').trim())
     .filter(line => line.length > 0)
     .filter(line => /[a-zA-Z]/.test(line))
-    .map(normalisePreviewLine);
+    .filter(line => !isLikelyHeaderLine(line))
+    .map(normalisePreviewLine)
+    .filter(line => line.split(/\s+/).length <= 4 || line.includes('|'));
 }
 
 function splitCommaOnlyWordRows(line) {
@@ -163,13 +237,55 @@ function splitCommaOnlyWordRows(line) {
   return [line];
 }
 
-function normalisePreviewLine(line) {
-  if (line.includes('|')) {
-    const [word, ...sentenceParts] = line.split('|');
+function parsePotentialWordSentenceLine(line) {
+  const cleaned = line
+    .replace(/^\d+[.)\-\s]+/, '')
+    .replace(/^[•\-*]\s*/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!cleaned || isLikelyHeaderLine(cleaned)) return null;
+
+  if (cleaned.includes('|')) {
+    const [word, ...sentenceParts] = cleaned.split('|');
     const cleanWord = cleanWordText(word);
     const sentence = sentenceParts.join('|').trim();
-    return sentence ? `${cleanWord} | ${sentence}` : cleanWord;
+    if (!isValidSpellingWord(cleanWord)) return null;
+    return sentence ? `${cleanWord} | ${cleanSentence(sentence)}` : cleanWord;
   }
+
+  // Table row style: "1. fly The bird can fly in the sky." or "fly The bird can fly..."
+  const match = cleaned.match(/^(?:\d+[.)]?\s+)?([A-Za-z][A-Za-z'-]*)\s+(.{6,})$/);
+  if (match) {
+    const word = cleanWordText(match[1]);
+    const sentence = cleanSentence(match[2]);
+    if (isValidSpellingWord(word) && looksLikeSentence(sentence)) {
+      return `${word} | ${sentence}`;
+    }
+  }
+
+  return null;
+}
+
+function extractRowsFromFlatPdfText(text) {
+  // Safety net for PDFs where all table text becomes one long paragraph.
+  // It looks for numbered spelling rows such as "1. fly The bird can fly... 2. snap ...".
+  const oneLine = text.replace(/\s+/g, ' ').trim();
+  const numberedRows = [...oneLine.matchAll(/(?:^|\s)(\d+[.)])\s+([A-Za-z][A-Za-z'-]*)\s+(.+?)(?=\s+\d+[.)]\s+[A-Za-z]|\s+TERM\s+\d|$)/gi)];
+
+  return numberedRows
+    .map(match => {
+      const word = cleanWordText(match[2]);
+      const sentence = cleanSentence(match[3]);
+      if (!isValidSpellingWord(word) || !looksLikeSentence(sentence)) return null;
+      return `${word} | ${sentence}`;
+    })
+    .filter(Boolean);
+}
+
+function normalisePreviewLine(line) {
+  const parsed = parsePotentialWordSentenceLine(line);
+  if (parsed) return parsed;
   return cleanWordText(line);
 }
 
@@ -181,23 +297,58 @@ function cleanWordText(text) {
     .toLowerCase();
 }
 
-function parsePreviewLines(text) {
-  return text
-    .split(/\r?\n+/)
-    .map(line => line.trim())
-    .filter(Boolean)
-    .map(line => {
-      if (line.includes('|')) {
-        const [word, ...sentenceParts] = line.split('|');
-        const cleanWord = cleanWordText(word);
-        const sentence = sentenceParts.join('|').trim() || `The word is ${cleanWord}.`;
-        return { w: cleanWord, s: sentence };
-      }
-      const cleanWord = cleanWordText(line);
-      return { w: cleanWord, s: `The word is ${cleanWord}.` };
-    })
-    .filter(item => item.w);
+function cleanSentence(text) {
+  const sentence = text
+    .replace(/\s+([.,!?;:])/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return sentence || '';
 }
+
+function isValidSpellingWord(word) {
+  return /^[a-z][a-z'-]{1,24}$/.test(word) && !STOP_WORDS.has(word);
+}
+
+function looksLikeSentence(sentence) {
+  if (!sentence || sentence.length < 6) return false;
+  if (isLikelyHeaderLine(sentence)) return false;
+  return /\s/.test(sentence) || /[.!?]$/.test(sentence);
+}
+
+function isLikelyHeaderLine(line) {
+  const lower = line.toLowerCase().replace(/\s+/g, ' ').trim();
+  return (
+    lower.includes('east spring primary school') ||
+    lower.includes('primary 1 spelling list') ||
+    lower.includes('parent') ||
+    lower.includes('signature') ||
+    lower.includes('spelling is carried') ||
+    lower.includes('only the bold') ||
+    lower.includes('underlined words') ||
+    lower.includes('you are encouraged') ||
+    /^term\s+\d/i.test(lower) ||
+    lower === 'word sentence' ||
+    lower === 'word' ||
+    lower === 'sentence' ||
+    /^name\b/i.test(lower) ||
+    /^class\b/i.test(lower)
+  );
+}
+
+function dedupeLines(lines) {
+  const seen = new Set();
+  return lines.filter(line => {
+    const key = line.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+const STOP_WORDS = new Set([
+  'term', 'week', 'word', 'sentence', 'name', 'class', 'parent', 'signature',
+  'spelling', 'note', 'only', 'bold', 'underlined', 'tested', 'test', 'school'
+]);
 
 function makeDefaultListName(fileName) {
   return fileName
