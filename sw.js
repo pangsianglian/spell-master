@@ -1,4 +1,4 @@
-const CACHE_NAME = 'spellmaster-cache-v221';
+const CACHE_NAME = 'spellmaster-cache-v222';
 const urlsToCache = [
   './',
   './index.html',
@@ -23,28 +23,35 @@ const urlsToCache = [
 
 self.addEventListener('install', event => {
   self.skipWaiting();
-
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache))
-  );
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache)));
 });
 
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames
-          .filter(cacheName => cacheName !== CACHE_NAME)
-          .map(cacheName => caches.delete(cacheName))
-      );
-    }).then(() => self.clients.claim())
+    caches.keys().then(cacheNames => Promise.all(
+      cacheNames.filter(cacheName => cacheName !== CACHE_NAME).map(cacheName => caches.delete(cacheName))
+    )).then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', event => {
-  event.respondWith(
-    caches.match(event.request).then(response => {
-      return response || fetch(event.request);
-    })
-  );
+  if (event.request.method !== 'GET') return;
+
+  const url = new URL(event.request.url);
+  const isAppShell = ['.html', '.js', '.css', '.json'].some(ext => url.pathname.endsWith(ext)) || url.pathname.endsWith('/');
+
+  if (isAppShell) {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  event.respondWith(caches.match(event.request).then(response => response || fetch(event.request)));
 });

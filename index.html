@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>SpellMaster Kids 2026</title>
-  <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="manifest" href="manifest.json?v=20260508-v222" />
+  <link rel="stylesheet" href="css/style.css?v=20260508-v222" />
 </head>
 <body>
   <main class="app-shell home-shell">
@@ -56,15 +56,15 @@
     </section>
   </main>
 
-  <script src="js/app-config.js"></script>
-  <script src="js/default-data.js"></script>
-  <script src="js/storage.js"></script>
-  <script src="js/session-utils.js"></script>
+  <script src="js/app-config.js?v=20260508-v222"></script>
+  <script src="js/default-data.js?v=20260508-v222"></script>
+  <script src="js/storage.js?v=20260508-v222"></script>
+  <script src="js/session-utils.js?v=20260508-v222"></script>
   <script>
     window.addEventListener('load', () => {
       renderVersion();
       loadDropdown();
-      if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+      if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js?v=20260508-v222');
     });
 
     function loadDropdown() {

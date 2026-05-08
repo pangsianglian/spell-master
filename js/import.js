@@ -202,6 +202,13 @@ async function readImageFile(file) {
 }
 
 function cleanImportedText(text) {
+  // First try a smart parser for school spelling-list PDFs. Some PDF extractors
+  // return one long paragraph with no row breaks, for example:
+  // "... word sentence fly the bird can fly ... snap the crocodile can snap ...".
+  // This parser rebuilds rows as "word | sentence" before the generic cleaner runs.
+  const smartFlatRows = extractRowsFromFlatPdfText(text);
+  if (smartFlatRows.length >= 3) return dedupeLines(smartFlatRows);
+
   const sourceLines = text
     .split(/\r?\n|;/)
     .map(line => line.trim())
@@ -268,19 +275,139 @@ function parsePotentialWordSentenceLine(line) {
 }
 
 function extractRowsFromFlatPdfText(text) {
-  // Safety net for PDFs where all table text becomes one long paragraph.
-  // It looks for numbered spelling rows such as "1. fly The bird can fly... 2. snap ...".
-  const oneLine = text.replace(/\s+/g, ' ').trim();
-  const numberedRows = [...oneLine.matchAll(/(?:^|\s)(\d+[.)])\s+([A-Za-z][A-Za-z'-]*)\s+(.+?)(?=\s+\d+[.)]\s+[A-Za-z]|\s+TERM\s+\d|$)/gi)];
+  const normalised = prepareFlatSpellingText(text);
 
-  return numberedRows
-    .map(match => {
-      const word = cleanWordText(match[2]);
-      const sentence = cleanSentence(match[3]);
-      if (!isValidSpellingWord(word) || !looksLikeSentence(sentence)) return null;
-      return `${word} | ${sentence}`;
-    })
+  // Case 1: PDF.js/pdftotext keeps row numbers.
+  const numberedRows = [...normalised.matchAll(/(?:^|\s)(\d+[.)])\s+([a-z][a-z'-]*)\s+(.+?)(?=\s+\d+[.)]\s+[a-z]|\s+term\s+(?:\d+\s*)?:?\s*week\b|$)/gi)]
+    .map(match => buildPreviewLine(match[2], match[3]))
     .filter(Boolean);
+  if (numberedRows.length >= 3) return numberedRows;
+
+  // Case 2: row numbers and line breaks are lost. Rebuild rows by detecting a
+  // spelling word followed by a short sentence containing the same word, then
+  // stop at the next detected spelling word.
+  const body = stripFlatPdfNoise(normalised);
+  const tokens = body.match(/[a-z]+(?:-[a-z]+)?(?:'[a-z]+)?/g) || [];
+  const rows = [];
+  let i = 0;
+
+  while (i < tokens.length) {
+    if (!isFlatBoundary(tokens, i)) {
+      i += 1;
+      continue;
+    }
+
+    const word = tokens[i];
+    let next = -1;
+
+    for (let j = i + 3; j < tokens.length; j += 1) {
+      const sentenceTokens = tokens.slice(i + 1, j);
+      if (sentenceTokens.length > 18) break;
+
+      if (sentenceMentionsWord(sentenceTokens, word) && isFlatBoundary(tokens, j)) {
+        next = j;
+        break;
+      }
+    }
+
+    if (next === -1) {
+      const sentenceTokens = tokens.slice(i + 1, Math.min(tokens.length, i + 20));
+      const trimmed = trimSentenceTokens(sentenceTokens, word);
+      if (trimmed.length >= 3 && sentenceMentionsWord(trimmed, word)) {
+        rows.push(formatPreviewRow(word, trimmed));
+      }
+      break;
+    }
+
+    const sentenceTokens = tokens.slice(i + 1, next);
+    if (sentenceTokens.length >= 3 && sentenceMentionsWord(sentenceTokens, word)) {
+      rows.push(formatPreviewRow(word, sentenceTokens));
+    }
+    i = next;
+  }
+
+  return rows;
+}
+
+function prepareFlatSpellingText(text) {
+  return String(text || '')
+    .replace(/\bt\s+erm\b/gi, 'term')
+    .replace(/\bq\s+ueen\b/gi, 'queen')
+    .replace(/\bice\s*-\s*cream\b/gi, 'ice-cream')
+    .replace(/parent[’']s/gi, 'parents')
+    .replace(/[_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function stripFlatPdfNoise(text) {
+  let body = text;
+  const firstTable = body.indexOf('word sentence');
+  if (firstTable >= 0) body = body.slice(firstTable + 'word sentence'.length);
+
+  return body
+    .replace(/east spring primary school/g, ' ')
+    .replace(/primary\s+1\s+spelling\s+list/g, ' ')
+    .replace(/term\s+\d+\s+\d{4}/g, ' ')
+    .replace(/name\s+class\s+\w*\s+parents\s+signature/g, ' ')
+    .replace(/spelling is carried out every tuesday/g, ' ')
+    .replace(/note only the bold or underlined words are tested during the spelling test/g, ' ')
+    .replace(/you are encouraged to read out the sentences as you learn your spelling words/g, ' ')
+    .replace(/term\s+(?:\d+\s*)?week\s+(?:\d+\s*)?(?:march|april|may|june|july|august|september|october|november|december)?\s*word\s+sentence/g, ' ')
+    .replace(/term\s+(?:\d+\s*)?:?\s*week\s+\d+\s*\([^)]*\)\s*word\s+sentence/g, ' ')
+    .replace(/\b(?:word|sentence)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isFlatBoundary(tokens, index) {
+  const word = tokens[index];
+  if (!isValidSpellingWord(word)) return false;
+  if (COMMON_SENTENCE_STARTERS.has(word)) return false;
+  if (FLAT_NOISE_WORDS.has(word)) return false;
+
+  const lookahead = tokens.slice(index + 1, index + 12);
+  return sentenceMentionsWord(lookahead, word);
+}
+
+function sentenceMentionsWord(tokens, word) {
+  return tokens.some(token => sameWordForFlatParser(token, word));
+}
+
+function sameWordForFlatParser(token, word) {
+  if (token === word) return true;
+  if (word.endsWith('s') && token === word.slice(0, -1)) return true;
+  if (token.endsWith('s') && token.slice(0, -1) === word) return true;
+  return false;
+}
+
+function trimSentenceTokens(tokens, word) {
+  const lastMention = tokens.map((token, index) => sameWordForFlatParser(token, word) ? index : -1).filter(index => index >= 0).pop();
+  if (lastMention === undefined) return tokens.slice(0, 12);
+  return tokens.slice(0, Math.min(tokens.length, lastMention + 8));
+}
+
+function formatPreviewRow(word, sentenceTokens) {
+  const sentence = sentenceFromTokens(sentenceTokens);
+  return `${cleanWordText(word)} | ${sentence}`;
+}
+
+function buildPreviewLine(word, sentenceText) {
+  const cleanWord = cleanWordText(word);
+  const cleanSent = cleanSentence(sentenceText);
+  if (!isValidSpellingWord(cleanWord) || !looksLikeSentence(cleanSent)) return null;
+  return `${cleanWord} | ${cleanSent}`;
+}
+
+function sentenceFromTokens(tokens) {
+  const text = tokens.join(' ')
+    .replace(/\bi\b/g, 'I')
+    .replace(/ice - cream/g, 'ice-cream')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return '';
+  return text.charAt(0).toUpperCase() + text.slice(1) + (/[.!?]$/.test(text) ? '' : '.');
 }
 
 function normalisePreviewLine(line) {
@@ -299,6 +426,9 @@ function cleanWordText(text) {
 
 function cleanSentence(text) {
   const sentence = text
+    .replace(/term\s+(?:\d+\s*)?:?\s*week\s+\d+\s*\([^)]*\)\s*word\s+sentence.*$/i, '')
+    .replace(/term\s+(?:\d+\s*)?week\s+(?:march|april|may|june|july|august|september|october|november|december)\s*word\s+sentence.*$/i, '')
+    .replace(/\b\d+\s*$/g, '')
     .replace(/\s+([.,!?;:])/g, '$1')
     .replace(/\s+/g, ' ')
     .trim();
@@ -348,6 +478,22 @@ function dedupeLines(lines) {
 const STOP_WORDS = new Set([
   'term', 'week', 'word', 'sentence', 'name', 'class', 'parent', 'signature',
   'spelling', 'note', 'only', 'bold', 'underlined', 'tested', 'test', 'school'
+]);
+
+const COMMON_SENTENCE_STARTERS = new Set([
+  'the', 'a', 'an', 'my', 'your', 'his', 'her', 'our', 'their', 'i', 'we',
+  'he', 'she', 'it', 'they', 'there', 'this', 'that', 'these', 'those',
+  'please', 'do', 'does', 'did', 'is', 'are', 'was', 'were', 'can', 'will',
+  'must', 'look', 'bees'
+]);
+
+const FLAT_NOISE_WORDS = new Set([
+  'east', 'spring', 'primary', 'list', 'term', 'week', 'march', 'april', 'may',
+  'name', 'class', 'parents', 'signature', 'spelling', 'carried', 'tuesday',
+  'note', 'bold', 'underlined', 'tested', 'test', 'encouraged', 'read', 'sentences',
+  'to', 'in', 'on', 'at', 'of', 'for', 'from', 'with', 'about', 'because',
+  'and', 'or', 'but', 'as', 'when', 'into', 'through', 'after', 'before',
+  'down', 'up', 'out', 'not', 'very', 'small', 'big', 'blue', 'cold'
 ]);
 
 function makeDefaultListName(fileName) {

@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2.2.1-kids';
+const APP_VERSION = 'v2.2.2-kids';
 const STORAGE_KEYS = {
   customLists: 'spellmaster-custom',
   history: 'spellmaster-history',
