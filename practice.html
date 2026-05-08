@@ -3,23 +3,52 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Practice - SpellMaster</title>
+  <title>Practice - SpellMaster Kids</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <main class="app-shell">
-    <h1>Practice</h1>
+    <div class="hero-mascot small" aria-hidden="true">🐊</div>
+    <h1>Crocodile Practice</h1>
     <div id="app-version" class="version"></div>
     <div class="top-row"><span id="list-title"></span><span id="progress"></span></div>
     <div class="badge" id="mode-badge"></div>
 
     <div id="practice-screen">
+      <div class="mode-toggle" aria-label="Practice mode">
+        <label><input type="radio" name="practicePlayMode" value="audio" checked /> 🎧 Audio</label>
+        <label><input type="radio" name="practicePlayMode" value="quiet" /> 👀 Quiet</label>
+        <label><input type="radio" name="practicePlayMode" value="both" /> 🔁 Both</label>
+      </div>
+
       <div id="hint-box" class="sentence-hint"></div>
       <div id="practice-slots" class="slots"></div>
       <input type="text" id="practice-input" placeholder="Type the missing word here..." autocomplete="off" />
-      <button onclick="checkPracticeAnswer()">Submit Practice Answer</button>
-      <button onclick="pronounceSentence()" class="dark">🔊 Hear Sentence</button>
+
+      <div class="button-row two-col">
+        <button onclick="checkPracticeAnswer()">✅ Check</button>
+        <button onclick="pronounceSentence()" class="dark">🔊 Hear Sentence</button>
+        <button onclick="showPracticeHint()" class="warning">💡 Hint</button>
+        <button onclick="skipPracticeWord()" class="secondary">➡️ Skip</button>
+        <button onclick="showPracticeAnswer()" class="helper-action">👀 Show Answer</button>
+      </div>
+
+      <div class="helper-panel" id="helper-panel">
+        <div class="helper-card">
+          <h3>💡 Sentence Clue</h3>
+          <p id="sentence-helper">Use the clue to find the word.</p>
+        </div>
+        <div class="helper-card">
+          <h3>🔤 Helper Letters</h3>
+          <p id="letter-helper">Letters will appear here.</p>
+        </div>
+        <div class="helper-card">
+          <h3>🐊 Crocodile Clue</h3>
+          <p id="croc-helper">Starts with ...</p>
+        </div>
+      </div>
+
       <div id="feedback" class="feedback"></div>
       <button onclick="window.location.href='index.html'" class="secondary">⬅️ Back to Menu</button>
     </div>

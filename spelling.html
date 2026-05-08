@@ -3,22 +3,51 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Spelling - SpellMaster</title>
+  <title>Spelling - SpellMaster Kids</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <main class="app-shell">
-    <h1>Spelling</h1>
+    <div class="hero-mascot small" aria-hidden="true">🐊</div>
+    <h1>Listen & Spell</h1>
     <div id="app-version" class="version"></div>
     <div class="top-row"><span id="list-title"></span><span id="progress"></span></div>
     <div class="badge" id="mode-badge"></div>
 
     <div id="spelling-screen">
-      <div class="sentence-hint">Listen carefully, then type the word.</div>
-      <button onclick="pronounceWord()" class="dark">🔊 Hear Word Again</button>
+      <div class="mode-toggle" aria-label="Spelling mode">
+        <label><input type="radio" name="spellingPlayMode" value="audio" checked /> 🎧 Audio</label>
+        <label><input type="radio" name="spellingPlayMode" value="quiet" /> 👀 Quiet</label>
+        <label><input type="radio" name="spellingPlayMode" value="both" /> 🔁 Both</label>
+      </div>
+
+      <div class="sentence-hint">🎯 Type the spelling. Use sound, quiet clues, or both.</div>
       <input type="text" id="spelling-input" placeholder="Type spelling here..." autocomplete="off" />
-      <button onclick="checkSpellingAnswer()">Check Spelling</button>
+
+      <div class="button-row two-col">
+        <button onclick="checkSpellingAnswer()">✅ Check</button>
+        <button onclick="pronounceWord()" class="dark">🔊 Hear Word</button>
+        <button onclick="showSpellingHint()" class="warning">💡 Hint</button>
+        <button onclick="skipSpellingWord()" class="secondary">➡️ Skip</button>
+        <button onclick="showSpellingAnswer()" class="helper-action">👀 Show Answer</button>
+      </div>
+
+      <div class="helper-panel" id="helper-panel">
+        <div class="helper-card">
+          <h3>💡 Sentence Clue</h3>
+          <p id="sentence-helper">Use the sentence to understand the word.</p>
+        </div>
+        <div class="helper-card">
+          <h3>🔤 Helper Letters</h3>
+          <p id="letter-helper">Letters will appear here.</p>
+        </div>
+        <div class="helper-card">
+          <h3>🐊 Crocodile Clue</h3>
+          <p id="croc-helper">Starts with ...</p>
+        </div>
+      </div>
+
       <div id="feedback" class="feedback"></div>
       <button onclick="window.location.href='index.html'" class="secondary">⬅️ Back to Menu</button>
     </div>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'spellmaster-cache-v11';
+const CACHE_NAME = 'spellmaster-cache-v22';
 const urlsToCache = [
   './',
   './index.html',
@@ -6,6 +6,7 @@ const urlsToCache = [
   './spelling.html',
   './lists.html',
   './history.html',
+  './import.html',
   './manifest.json',
   './css/style.css',
   './js/app-config.js',
@@ -15,6 +16,7 @@ const urlsToCache = [
   './js/session-utils.js',
   './js/practice.js',
   './js/spelling.js',
+  './js/import.js',
   './icons/icon-192.png',
   './icons/icon-512.png'
 ];

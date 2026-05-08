@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Import Words - SpellMaster Kids</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+</head>
+<body>
+  <main class="app-shell">
+    <div class="hero-mascot small" aria-hidden="true">📥</div>
+    <h1>Import Words</h1>
+    <div id="app-version" class="version"></div>
+    <p class="subtitle">Import from picture, PDF, Word document, text file, or pasted text.</p>
+
+    <section class="card rainbow-card">
+      <label for="file-input">Choose file</label>
+      <input id="file-input" type="file" accept=".txt,.pdf,.docx,image/*" />
+      <p class="small-note">Supported: TXT, DOCX, PDF with selectable text, JPG and PNG. Old .doc files are not supported.</p>
+      <button id="extract-btn">✨ Extract Words</button>
+      <div id="status" class="status-note"></div>
+    </section>
+
+    <section class="card">
+      <h3>✍️ Or paste spelling words</h3>
+      <textarea id="paste-text" placeholder="apple | I eat an apple.&#10;banana | The banana is yellow.&#10;crocodile | The crocodile snaps its mouth."></textarea>
+      <button id="use-paste-btn" class="dark">Use Pasted Text</button>
+    </section>
+
+    <section class="card">
+      <h3>👀 Check Imported Spelling List</h3>
+      <p class="helper-text">Please check the words below before saving. You can edit wrong OCR/PDF words, remove extra lines, or add missing words.</p>
+      <textarea id="preview-text" placeholder="Extracted words will appear here..."></textarea>
+      <label for="list-name">List name</label>
+      <input id="list-name" type="text" placeholder="Example: P1 Week 5 Spelling" />
+      <div class="button-row two-col">
+        <button id="confirm-save-btn" class="success">✅ Confirm & Save List</button>
+        <button id="clear-btn" class="secondary">🧹 Clear</button>
+      </div>
+    </section>
+
+    <a class="button-link secondary" href="index.html">⬅️ Back to Menu</a>
+  </main>
+
+  <script src="js/app-config.js"></script>
+  <script src="js/default-data.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/session-utils.js"></script>
+  <script type="module" src="js/import.js"></script>
+</body>
+</html>

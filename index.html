@@ -3,36 +3,56 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>SpellMaster 2026</title>
+  <title>SpellMaster Kids 2026</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-  <main class="app-shell">
-    <h1>SpellMaster</h1>
-    <div class="subtitle">Offline spelling revision assistant</div>
+  <main class="app-shell home-shell">
+    <div class="hero-mascot" aria-hidden="true">🐊</div>
+    <h1>SpellMaster Kids</h1>
+    <div class="subtitle">Colourful spelling practice for K1, K2 and P1 learners</div>
     <div id="app-version" class="version"></div>
 
-    <label for="week-selector">Select spelling list</label>
-    <select id="week-selector"></select>
-
-    <section class="card">
-      <h3>Practice</h3>
-      <p>Fill in the blank. Submit your answer. Correct letters stay and wrong letters disappear.</p>
-      <button onclick="goToMode('practice', false)">✏️ Practice</button>
-      <button onclick="goToMode('practice', true)" class="dark">🔀 Random Practice</button>
+    <section class="card rainbow-card">
+      <label for="week-selector">📚 Select spelling list</label>
+      <select id="week-selector"></select>
     </section>
 
-    <section class="card">
-      <h3>Spelling</h3>
-      <p>Listen to the word slowly and type the full spelling.</p>
-      <button onclick="goToMode('spelling', false)">🔊 Spelling</button>
-      <button onclick="goToMode('spelling', true)" class="dark">🔀 Random Spelling</button>
-    </section>
+    <section class="menu-grid">
+      <article class="menu-card practice-card">
+        <div class="menu-emoji">🐊</div>
+        <h3>Crocodile Practice</h3>
+        <p>Fill in missing letters with friendly hints.</p>
+        <button onclick="goToMode('practice', false)">✏️ Start Practice</button>
+        <button onclick="goToMode('practice', true)" class="dark">🔀 Random Practice</button>
+      </article>
 
-    <section class="nav-grid">
-      <a class="button-link success" href="lists.html">➕ Add / Manage Lists</a>
-      <a class="button-link secondary" href="history.html">📊 View History</a>
+      <article class="menu-card spelling-card">
+        <div class="menu-emoji">🎧</div>
+        <h3>Listen & Spell</h3>
+        <p>Use sound, quiet clues, or both.</p>
+        <button onclick="goToMode('spelling', false)">🔊 Start Spelling</button>
+        <button onclick="goToMode('spelling', true)" class="dark">🔀 Random Spelling</button>
+      </article>
+
+      <a class="menu-card import-card" href="import.html">
+        <div class="menu-emoji">📥</div>
+        <h3>Import Words</h3>
+        <p>Add lists from TXT, DOCX, PDF, pictures or pasted text.</p>
+      </a>
+
+      <a class="menu-card list-card" href="lists.html">
+        <div class="menu-emoji">➕</div>
+        <h3>Add / Manage Lists</h3>
+        <p>Create or edit parent/teacher word lists.</p>
+      </a>
+
+      <a class="menu-card history-card" href="history.html">
+        <div class="menu-emoji">⭐</div>
+        <h3>My Stars & History</h3>
+        <p>Review progress and words to practise again.</p>
+      </a>
     </section>
   </main>
 
