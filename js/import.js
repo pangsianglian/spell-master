@@ -8,6 +8,16 @@ const confirmSaveBtn = document.getElementById('confirm-save-btn');
 const clearBtn = document.getElementById('clear-btn');
 const statusText = document.getElementById('status');
 
+// Keep import page self-contained. app-config.js uses const, which is not
+// visible inside ES modules in some browsers.
+const IMPORT_STORAGE_KEYS = {
+  customLists: 'spellmaster-custom',
+  lastList: 'spellmaster-last-list'
+};
+
+let lastImportSource = 'unknown';
+let lastOcrConfidence = null;
+
 window.addEventListener('load', renderVersion);
 
 extractBtn.addEventListener('click', async () => {
@@ -22,6 +32,9 @@ extractBtn.addEventListener('click', async () => {
   try {
     let rawText = '';
     const lowerName = file.name.toLowerCase();
+    const isImage = file.type.startsWith('image/');
+    lastImportSource = isImage ? 'image' : lowerName.endsWith('.pdf') ? 'pdf' : 'file';
+    lastOcrConfidence = null;
 
     if (file.type === 'text/plain' || lowerName.endsWith('.txt')) {
       rawText = await file.text();
@@ -29,7 +42,7 @@ extractBtn.addEventListener('click', async () => {
       rawText = await readDocxFile(file);
     } else if (file.type === 'application/pdf' || lowerName.endsWith('.pdf')) {
       rawText = await readPdfFile(file);
-    } else if (file.type.startsWith('image/')) {
+    } else if (isImage) {
       rawText = await readImageFile(file);
     } else {
       showStatus('Unsupported file type. Please use TXT, DOCX, PDF, JPG, or PNG.', true);
@@ -37,9 +50,20 @@ extractBtn.addEventListener('click', async () => {
     }
 
     const cleanedLines = cleanImportedText(rawText);
+
+    if (isImage && (cleanedLines.length < 3 || (lastOcrConfidence !== null && lastOcrConfidence < 55))) {
+      previewText.value = rawText.trim();
+      showStatus('Picture OCR result looks weak. Please edit the preview manually, or use the original PDF for better extraction.', true);
+      if (!listNameInput.value.trim()) listNameInput.value = makeDefaultListName(file.name);
+      return;
+    }
+
     previewText.value = cleanedLines.join('\n');
     if (!listNameInput.value.trim()) listNameInput.value = makeDefaultListName(file.name);
-    showStatus(`Imported ${cleanedLines.length} line(s). Please check and edit before clicking Confirm & Save.`);
+
+    const sectionCount = countPreviewSections(previewText.value);
+    const sectionText = sectionCount > 1 ? ` across ${sectionCount} weekly lists` : '';
+    showStatus(`Imported ${countPreviewWords(previewText.value)} word(s)${sectionText}. Please check and edit before clicking Confirm & Save.`);
   } catch (error) {
     console.error(error);
     showStatus('Sorry, I could not read this file. Please try another file or paste the words instead.', true);
@@ -52,17 +76,20 @@ usePasteBtn.addEventListener('click', () => {
     showStatus('Please paste some words first.', true);
     return;
   }
+  lastImportSource = 'paste';
   const cleanedLines = cleanImportedText(rawText);
   previewText.value = cleanedLines.join('\n');
   if (!listNameInput.value.trim()) listNameInput.value = 'Imported Spelling List';
-  showStatus(`Prepared ${cleanedLines.length} line(s). Please check and edit before saving.`);
+  const sectionCount = countPreviewSections(previewText.value);
+  const sectionText = sectionCount > 1 ? ` across ${sectionCount} weekly lists` : '';
+  showStatus(`Prepared ${countPreviewWords(previewText.value)} word(s)${sectionText}. Please check and edit before saving.`);
 });
 
 confirmSaveBtn.addEventListener('click', () => {
-  const listName = listNameInput.value.trim();
+  const baseListName = listNameInput.value.trim();
   const content = previewText.value.trim();
 
-  if (!listName) {
+  if (!baseListName) {
     showStatus('Please enter a list name before saving.', true);
     return;
   }
@@ -72,26 +99,40 @@ confirmSaveBtn.addEventListener('click', () => {
     return;
   }
 
-  const items = parsePreviewLines(content);
-  if (!items.length) {
-    showStatus('No valid spelling words found.', true);
+  const sections = parsePreviewSections(content);
+  const totalWords = sections.reduce((sum, section) => sum + section.items.length, 0);
+
+  if (!totalWords) {
+    showStatus('No valid spelling words found. Please check the preview format.', true);
     return;
   }
 
-  const isConfirmed = window.confirm(
-    `Please confirm:\n\nYou are about to save ${items.length} spelling word(s) to "${listName}".\n\nHave you checked that the spelling list is correct?`
-  );
+  const listNames = sections.length > 1
+    ? sections.map(section => `${baseListName} - ${section.title}`)
+    : [baseListName];
 
-  if (!isConfirmed) {
+  const confirmMessage = sections.length > 1
+    ? `Please confirm:\n\nThe app will save ${totalWords} spelling word(s) as ${sections.length} separate weekly list(s):\n\n${listNames.join('\n')}\n\nHave you checked that the spelling lists are correct?`
+    : `Please confirm:\n\nYou are about to save ${totalWords} spelling word(s) to "${baseListName}".\n\nHave you checked that the spelling list is correct?`;
+
+  if (!window.confirm(confirmMessage)) {
     showStatus('Save cancelled. Please continue checking the list.');
     return;
   }
 
-  const custom = getCustomLists();
-  custom[listName] = items;
-  saveCustomLists(custom);
-  saveLastList(listName);
-  showStatus(`Saved "${listName}" with ${items.length} word(s). ⭐`);
+  const custom = getCustomListsForImport();
+  sections.forEach((section, index) => {
+    const saveName = sections.length > 1 ? listNames[index] : baseListName;
+    custom[saveName] = section.items;
+  });
+
+  saveCustomListsForImport(custom);
+  saveLastListForImport(listNames[0]);
+
+  const savedText = sections.length > 1
+    ? `Saved ${sections.length} weekly lists with ${totalWords} word(s). ⭐`
+    : `Saved "${baseListName}" with ${totalWords} word(s). ⭐`;
+  showStatus(savedText);
 });
 
 clearBtn.addEventListener('click', () => {
@@ -100,6 +141,7 @@ clearBtn.addEventListener('click', () => {
   pasteText.value = '';
   listNameInput.value = '';
   fileInput.value = '';
+  lastOcrConfidence = null;
   showStatus('Import preview cleared.');
 });
 
@@ -131,7 +173,6 @@ async function readPdfFile(file) {
     if (pageLines.length) {
       extractedLines.push(...pageLines);
     } else {
-      // Fallback for simple PDFs without table-like coordinates.
       extractedLines.push(textContent.items.map(item => item.str).join(' '));
     }
   }
@@ -170,7 +211,13 @@ function extractPdfTableRows(items) {
     let line = row.items.map(item => item.text).join(' ').replace(/\s+/g, ' ').trim();
     if (!line) return;
 
-    // Some PDFs place the row number slightly above the word/sentence row.
+    const weekTitle = parseWeekHeader(line);
+    if (weekTitle) {
+      output.push(`# ${weekTitle}`);
+      pendingNumber = '';
+      return;
+    }
+
     if (/^\d+[.)]?$/.test(line)) {
       pendingNumber = line;
       return;
@@ -185,31 +232,67 @@ function extractPdfTableRows(items) {
     if (parsed) output.push(parsed);
   });
 
-  return dedupeLines(output);
+  return dedupeRowsWithinSections(output);
 }
 
 async function readImageFile(file) {
   if (!window.Tesseract) throw new Error('Tesseract library is not loaded.');
+  showStatus('Preparing picture for OCR...');
+  const processedImage = await preprocessImageForOcr(file);
+
   showStatus('Reading picture text... 0%');
-  const result = await window.Tesseract.recognize(file, 'eng', {
+  const result = await window.Tesseract.recognize(processedImage, 'eng', {
     logger: message => {
       if (message.status === 'recognizing text') {
         showStatus(`Reading picture text... ${Math.round(message.progress * 100)}%`);
       }
-    }
+    },
+    tessedit_pageseg_mode: '6',
+    preserve_interword_spaces: '1'
   });
+
+  lastOcrConfidence = Number(result.data.confidence || 0);
   return result.data.text;
 }
 
-function cleanImportedText(text) {
-  // First try a smart parser for school spelling-list PDFs. Some PDF extractors
-  // return one long paragraph with no row breaks, for example:
-  // "... word sentence fly the bird can fly ... snap the crocodile can snap ...".
-  // This parser rebuilds rows as "word | sentence" before the generic cleaner runs.
-  const smartFlatRows = extractRowsFromFlatPdfText(text);
-  if (smartFlatRows.length >= 3) return dedupeLines(smartFlatRows);
+function preprocessImageForOcr(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = () => { img.src = reader.result; };
+    reader.onerror = reject;
+    img.onerror = reject;
+    img.onload = () => {
+      const scale = Math.max(2, Math.min(4, 1800 / Math.max(img.width, img.height)));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-  const sourceLines = text
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+        const bw = gray > 165 ? 255 : 0;
+        data[i] = bw;
+        data[i + 1] = bw;
+        data[i + 2] = bw;
+      }
+      ctx.putImageData(imageData, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function cleanImportedText(text) {
+  const smartRows = extractRowsFromFlatPdfText(text);
+  if (countWordsInLines(smartRows) >= 3) return dedupeRowsWithinSections(smartRows);
+
+  const sourceLines = String(text || '')
     .split(/\r?\n|;/)
     .map(line => line.trim())
     .filter(Boolean);
@@ -217,13 +300,10 @@ function cleanImportedText(text) {
   const structuredLines = sourceLines
     .flatMap(line => splitCommaOnlyWordRows(line))
     .map(line => line.replace(/^[•\-*]\s*/, '').replace(/\s+/g, ' ').trim())
-    .map(parsePotentialWordSentenceLine)
+    .map(line => parseWeekHeader(line) ? `# ${parseWeekHeader(line)}` : parsePotentialWordSentenceLine(line))
     .filter(Boolean);
 
-  if (structuredLines.length >= 3) return dedupeLines(structuredLines);
-
-  const flatRows = extractRowsFromFlatPdfText(text);
-  if (flatRows.length >= 3) return dedupeLines(flatRows);
+  if (countWordsInLines(structuredLines) >= 3) return dedupeRowsWithinSections(structuredLines);
 
   return sourceLines
     .flatMap(line => splitCommaOnlyWordRows(line))
@@ -245,13 +325,13 @@ function splitCommaOnlyWordRows(line) {
 }
 
 function parsePotentialWordSentenceLine(line) {
-  const cleaned = line
+  const cleaned = String(line || '')
     .replace(/^\d+[.)\-\s]+/, '')
     .replace(/^[•\-*]\s*/, '')
     .replace(/\s+/g, ' ')
     .trim();
 
-  if (!cleaned || isLikelyHeaderLine(cleaned)) return null;
+  if (!cleaned || isLikelyHeaderLine(cleaned) || parseWeekHeader(cleaned)) return null;
 
   if (cleaned.includes('|')) {
     const [word, ...sentenceParts] = cleaned.split('|');
@@ -261,7 +341,6 @@ function parsePotentialWordSentenceLine(line) {
     return sentence ? `${cleanWord} | ${cleanSentence(sentence)}` : cleanWord;
   }
 
-  // Table row style: "1. fly The bird can fly in the sky." or "fly The bird can fly..."
   const match = cleaned.match(/^(?:\d+[.)]?\s+)?([A-Za-z][A-Za-z'-]*)\s+(.{6,})$/);
   if (match) {
     const word = cleanWordText(match[1]);
@@ -276,18 +355,49 @@ function parsePotentialWordSentenceLine(line) {
 
 function extractRowsFromFlatPdfText(text) {
   const normalised = prepareFlatSpellingText(text);
+  const sectionRows = extractFlatWeekSections(normalised);
+  if (countWordsInLines(sectionRows) >= 3) return sectionRows;
 
-  // Case 1: PDF.js/pdftotext keeps row numbers.
   const numberedRows = [...normalised.matchAll(/(?:^|\s)(\d+[.)])\s+([a-z][a-z'-]*)\s+(.+?)(?=\s+\d+[.)]\s+[a-z]|\s+term\s+(?:\d+\s*)?:?\s*week\b|$)/gi)]
     .map(match => buildPreviewLine(match[2], match[3]))
     .filter(Boolean);
   if (numberedRows.length >= 3) return numberedRows;
 
-  // Case 2: row numbers and line breaks are lost. Rebuild rows by detecting a
-  // spelling word followed by a short sentence containing the same word, then
-  // stop at the next detected spelling word.
-  const body = stripFlatPdfNoise(normalised);
-  const tokens = body.match(/[a-z]+(?:-[a-z]+)?(?:'[a-z]+)?/g) || [];
+  return extractRowsFromFlatSegment(stripFlatPdfNoise(normalised));
+}
+
+function extractFlatWeekSections(normalised) {
+  // Handles both good PDF text: "Term 2: Week 7 (5 May) Word Sentence"
+  // and weak flat text: "term week may word sentence". The latter loses
+  // week numbers, so we still split into separate imported week groups.
+  const headerRegex = /term\s+(?:(\d+)\s*:?)?\s*week\s*(?:(\d+)\s*)?(?:(?:\(?\s*)(\d{1,2})?\s*([a-z]+)?\s*\)?)?\s*word\s+sentence/gi;
+  const headers = [...normalised.matchAll(headerRegex)];
+  if (!headers.length) return [];
+
+  const rows = [];
+  headers.forEach((header, index) => {
+    const title = makeWeekTitle(header, index);
+    const start = header.index + header[0].length;
+    const end = index + 1 < headers.length ? headers[index + 1].index : normalised.length;
+    const segment = normalised.slice(start, end).trim();
+    const segmentRows = extractRowsFromFlatSegment(segment);
+    if (segmentRows.length) {
+      rows.push(`# ${title}`);
+      rows.push(...segmentRows);
+    }
+  });
+
+  return rows;
+}
+
+function extractRowsFromFlatSegment(segment) {
+  const cleanedSegment = stripFlatPdfNoise(segment);
+  const numberedRows = [...cleanedSegment.matchAll(/(?:^|\s)(\d+[.)])\s+([a-z][a-z'-]*)\s+(.+?)(?=\s+\d+[.)]\s+[a-z]|$)/gi)]
+    .map(match => buildPreviewLine(match[2], match[3]))
+    .filter(Boolean);
+  if (numberedRows.length >= 3) return numberedRows;
+
+  const tokens = cleanedSegment.match(/[a-z]+(?:-[a-z]+)?(?:'[a-z]+)?/g) || [];
   const rows = [];
   let i = 0;
 
@@ -302,7 +412,7 @@ function extractRowsFromFlatPdfText(text) {
 
     for (let j = i + 3; j < tokens.length; j += 1) {
       const sentenceTokens = tokens.slice(i + 1, j);
-      if (sentenceTokens.length > 18) break;
+      if (sentenceTokens.length > 20) break;
 
       if (sentenceMentionsWord(sentenceTokens, word) && isFlatBoundary(tokens, j)) {
         next = j;
@@ -333,6 +443,7 @@ function prepareFlatSpellingText(text) {
   return String(text || '')
     .replace(/\bt\s+erm\b/gi, 'term')
     .replace(/\bq\s+ueen\b/gi, 'queen')
+    .replace(/\bp\s+o\s+op\b/gi, '')
     .replace(/\bice\s*-\s*cream\b/gi, 'ice-cream')
     .replace(/parent[’']s/gi, 'parents')
     .replace(/[_]+/g, ' ')
@@ -342,7 +453,7 @@ function prepareFlatSpellingText(text) {
 }
 
 function stripFlatPdfNoise(text) {
-  let body = text;
+  let body = String(text || '');
   const firstTable = body.indexOf('word sentence');
   if (firstTable >= 0) body = body.slice(firstTable + 'word sentence'.length);
 
@@ -354,11 +465,29 @@ function stripFlatPdfNoise(text) {
     .replace(/spelling is carried out every tuesday/g, ' ')
     .replace(/note only the bold or underlined words are tested during the spelling test/g, ' ')
     .replace(/you are encouraged to read out the sentences as you learn your spelling words/g, ' ')
-    .replace(/term\s+(?:\d+\s*)?week\s+(?:\d+\s*)?(?:march|april|may|june|july|august|september|october|november|december)?\s*word\s+sentence/g, ' ')
     .replace(/term\s+(?:\d+\s*)?:?\s*week\s+\d+\s*\([^)]*\)\s*word\s+sentence/g, ' ')
+    .replace(/term\s+(?:\d+\s*)?week\s+(?:\d+\s*)?(?:march|april|may|june|july|august|september|october|november|december)?\s*word\s+sentence/g, ' ')
     .replace(/\b(?:word|sentence)\b/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function parseWeekHeader(line) {
+  const lower = String(line || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const match = lower.match(/term\s+(?:(\d+)\s*:?)?\s*week\s*(?:(\d+)\s*)?(?:(?:\(?\s*)(\d{1,2})?\s+?([a-z]+)?\s*\)?)?/i);
+  if (!match || !lower.includes('week')) return null;
+  return makeWeekTitle(match, 0);
+}
+
+function makeWeekTitle(match, index = 0) {
+  const term = match[1];
+  const week = match[2];
+  const day = match[3];
+  const month = match[4];
+  const date = day && month ? ` (${day} ${capitalise(month)})` : month ? ` (${capitalise(month)})` : '';
+  if (term && week) return `Term ${term} Week ${week}${date}`;
+  if (week) return `Week ${week}${date}`;
+  return `Imported Week ${index + 1}${date}`;
 }
 
 function isFlatBoundary(tokens, index) {
@@ -383,8 +512,9 @@ function sameWordForFlatParser(token, word) {
 }
 
 function trimSentenceTokens(tokens, word) {
-  const lastMention = tokens.map((token, index) => sameWordForFlatParser(token, word) ? index : -1).filter(index => index >= 0).pop();
-  if (lastMention === undefined) return tokens.slice(0, 12);
+  const mentions = tokens.map((token, index) => sameWordForFlatParser(token, word) ? index : -1).filter(index => index >= 0);
+  if (!mentions.length) return tokens.slice(0, 12);
+  const lastMention = mentions[mentions.length - 1];
   return tokens.slice(0, Math.min(tokens.length, lastMention + 8));
 }
 
@@ -417,7 +547,7 @@ function normalisePreviewLine(line) {
 }
 
 function cleanWordText(text) {
-  return text
+  return String(text || '')
     .replace(/[^a-zA-Z\s'-]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
@@ -425,7 +555,7 @@ function cleanWordText(text) {
 }
 
 function cleanSentence(text) {
-  const sentence = text
+  const sentence = String(text || '')
     .replace(/term\s+(?:\d+\s*)?:?\s*week\s+\d+\s*\([^)]*\)\s*word\s+sentence.*$/i, '')
     .replace(/term\s+(?:\d+\s*)?week\s+(?:march|april|may|june|july|august|september|october|november|december)\s*word\s+sentence.*$/i, '')
     .replace(/\b\d+\s*$/g, '')
@@ -446,7 +576,7 @@ function looksLikeSentence(sentence) {
 }
 
 function isLikelyHeaderLine(line) {
-  const lower = line.toLowerCase().replace(/\s+/g, ' ').trim();
+  const lower = String(line || '').toLowerCase().replace(/\s+/g, ' ').trim();
   return (
     lower.includes('east spring primary school') ||
     lower.includes('primary 1 spelling list') ||
@@ -465,14 +595,111 @@ function isLikelyHeaderLine(line) {
   );
 }
 
-function dedupeLines(lines) {
-  const seen = new Set();
-  return lines.filter(line => {
-    const key = line.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
+function parsePreviewSections(content) {
+  const lines = String(content || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const sections = [];
+  let current = { title: 'Imported List', items: [] };
+  let hasExplicitHeader = false;
+
+  lines.forEach(line => {
+    const headerMatch = line.match(/^#+\s*(.+)$/) || line.match(/^\[(.+)\]$/);
+    const weekHeader = parseWeekHeader(line);
+
+    if (headerMatch || weekHeader) {
+      if (current.items.length) sections.push(current);
+      current = { title: normaliseSectionTitle(headerMatch ? headerMatch[1] : weekHeader), items: [] };
+      hasExplicitHeader = true;
+      return;
+    }
+
+    const item = previewLineToItem(line);
+    if (item) current.items.push(item);
   });
+
+  if (current.items.length) sections.push(current);
+  if (!hasExplicitHeader && sections.length === 1) sections[0].title = 'Imported List';
+  return sections.filter(section => section.items.length > 0);
+}
+
+function previewLineToItem(line) {
+  const parsed = parsePotentialWordSentenceLine(line) || normalisePreviewLine(line);
+  if (!parsed || parsed.startsWith('#')) return null;
+  if (parsed.includes('|')) {
+    const [wordPart, ...sentenceParts] = parsed.split('|');
+    const word = cleanWordText(wordPart);
+    const sentence = cleanSentence(sentenceParts.join('|')) || `Spell ${word}.`;
+    if (!isValidSpellingWord(word)) return null;
+    return { w: word, s: sentence };
+  }
+
+  const word = cleanWordText(parsed);
+  if (!isValidSpellingWord(word)) return null;
+  return { w: word, s: `Spell ${word}.` };
+}
+
+function countPreviewSections(content) {
+  return parsePreviewSections(content).length;
+}
+
+function countPreviewWords(content) {
+  return parsePreviewSections(content).reduce((sum, section) => sum + section.items.length, 0);
+}
+
+function countWordsInLines(lines) {
+  return lines.filter(line => line && !String(line).startsWith('#')).length;
+}
+
+function dedupeRowsWithinSections(lines) {
+  const output = [];
+  let seen = new Set();
+  lines.forEach(line => {
+    if (!line) return;
+    if (String(line).startsWith('#')) {
+      output.push(line);
+      seen = new Set();
+      return;
+    }
+    const key = String(line).toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    output.push(line);
+  });
+  return output;
+}
+
+function normaliseSectionTitle(title) {
+  return String(title || 'Imported List')
+    .replace(/[#\[\]]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim() || 'Imported List';
+}
+
+function capitalise(word) {
+  return String(word || '').charAt(0).toUpperCase() + String(word || '').slice(1).toLowerCase();
+}
+
+function makeDefaultListName(fileName) {
+  return String(fileName || '')
+    .replace(/\.[^.]+$/, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim() || 'Imported Spelling List';
+}
+
+function safeJsonParse(value, fallback) {
+  try { return value ? JSON.parse(value) : fallback; } catch { return fallback; }
+}
+
+function getCustomListsForImport() {
+  return safeJsonParse(localStorage.getItem(IMPORT_STORAGE_KEYS.customLists), {});
+}
+
+function saveCustomListsForImport(lists) {
+  localStorage.setItem(IMPORT_STORAGE_KEYS.customLists, JSON.stringify(lists));
+}
+
+function saveLastListForImport(name) {
+  localStorage.setItem(IMPORT_STORAGE_KEYS.lastList, name);
 }
 
 const STOP_WORDS = new Set([
@@ -495,11 +722,3 @@ const FLAT_NOISE_WORDS = new Set([
   'and', 'or', 'but', 'as', 'when', 'into', 'through', 'after', 'before',
   'down', 'up', 'out', 'not', 'very', 'small', 'big', 'blue', 'cold'
 ]);
-
-function makeDefaultListName(fileName) {
-  return fileName
-    .replace(/\.[^.]+$/, '')
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim() || 'Imported Spelling List';
-}
