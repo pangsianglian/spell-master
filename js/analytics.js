@@ -108,7 +108,7 @@
       <div class="brand-footer-mark">🐊 SpellMaster Kids by Angel Pang</div>
       <div class="brand-footer-line">Built to make spelling practice easier, calmer and happier.</div>
       <div class="privacy-note">
-        Privacy note: spelling lists and practice history are stored locally on this device. Please avoid uploading personal or sensitive information. Basic anonymous usage statistics may be used to improve the app.
+        Privacy note: spelling lists and practice history are stored locally on this device.
       </div>
     `;
     document.body.appendChild(footer);
